@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "latest",
+    "@google/genai": "latest",
     "express": "^4.21.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

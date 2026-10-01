@@ -2,22 +2,18 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === "production";
 const PORT = Number(process.env.PORT) || 5000;
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+// Change via the GEMINI_MODEL secret if this name is retired or not on your key.
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 const MAX_ATTEMPTS = 3;
 const MAX_OPTION_CHARS = 70;
 
-// Replit managed integration vars take priority; fall back to your own key.
-const apiKey =
-  process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
-const baseURL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined;
-const client = apiKey
-  ? new Anthropic({ apiKey, baseURL, timeout: 45_000, maxRetries: 1 })
-  : null;
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 /* ---------- Approved source registry ---------- */
 const SOURCES = [
@@ -64,6 +60,7 @@ Never state, quote, or paraphrase the correct option. Never mention option lette
 
 /* ---------- Helpers ---------- */
 const clean = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const tokens = (s) =>
   new Set(s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 3));
@@ -121,10 +118,20 @@ function finalize(q) {
   };
 }
 
-const textOf = (msg) => msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+// Maps provider errors to messages a player can act on.
+function describeError(e) {
+  const status = e?.status;
+  const msg = String(e?.message || "");
+  if (status === 429) return { rate: true, text: "The free Gemini quota is used up for now. Wait a minute and retry, or try again tomorrow." };
+  if (status === 404) return { fatal: true, text: `Model "${MODEL}" was not found for this key. Set the GEMINI_MODEL secret to a model listed in AI Studio.` };
+  if (status === 401 || status === 403 || /API key not valid|API_KEY_INVALID|permission/i.test(msg))
+    return { fatal: true, text: "Gemini rejected the server API key." };
+  return { text: msg || "unknown error" };
+}
 
 async function generateQuestion({ topic, difficulty, previous }) {
   let lastError = "";
+  let sawRateLimit = false;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const prompt = [
       `Topic: ${topic}`,
@@ -137,23 +144,32 @@ async function generateQuestion({ topic, difficulty, previous }) {
     ].filter(Boolean).join("\n\n");
 
     try {
-      const msg = await client.messages.create({
-        model: MODEL, max_tokens: 700, temperature: 0.8,
-        system: QUESTION_SYSTEM,
-        messages: [{ role: "user", content: prompt }],
+      const resp = await ai.models.generateContent({
+        model: MODEL,
+        contents: prompt,
+        config: {
+          systemInstruction: QUESTION_SYSTEM,
+          temperature: 0.8,
+          maxOutputTokens: 2048, // headroom in case the model spends tokens on thinking
+          responseMimeType: "application/json",
+        },
       });
-      const parsed = extractJson(textOf(msg));
+      const parsed = extractJson(resp.text ?? "");
       const err = validate(parsed, previous);
       if (!err) return finalize(parsed);
       lastError = err;
     } catch (e) {
-      if (e?.status === 401 || e?.status === 403)
-        throw Object.assign(new Error("Anthropic rejected the server credentials."), { fatal: true });
-      lastError = e?.message || "unknown error";
+      const d = describeError(e);
+      if (d.fatal) throw Object.assign(new Error(d.text), { fatal: true });
+      lastError = d.text;
+      if (d.rate) {
+        sawRateLimit = true;
+        if (attempt < MAX_ATTEMPTS) await sleep(4000 * attempt); // back off, do not burn quota
+      }
     }
     console.warn(`[question] attempt ${attempt} failed: ${lastError}`);
   }
-  throw new Error(`Could not generate a valid question after ${MAX_ATTEMPTS} attempts.`);
+  throw new Error(sawRateLimit ? lastError : `Could not generate a valid question after ${MAX_ATTEMPTS} attempts.`);
 }
 
 /* ---------- App ---------- */
@@ -173,11 +189,11 @@ function limiter(req, res, next) {
 }
 setInterval(() => hits.clear(), 10 * 60_000).unref();
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, model: MODEL, configured: !!client }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, model: MODEL, configured: !!ai }));
 
 app.post("/api/question", limiter, async (req, res) => {
-  if (!client)
-    return res.status(503).json({ error: "not_configured", message: "Server has no Anthropic credentials configured." });
+  if (!ai)
+    return res.status(503).json({ error: "not_configured", message: "Server has no Gemini API key configured." });
   const topic = clean(req.body?.topic, 80);
   const difficulty = req.body?.difficulty;
   if (!topic || typeof difficulty !== "string" || !Object.hasOwn(DIFFICULTY_GUIDE, difficulty))
@@ -193,21 +209,19 @@ app.post("/api/question", limiter, async (req, res) => {
 });
 
 app.post("/api/hint", limiter, async (req, res) => {
-  if (!client)
-    return res.status(503).json({ error: "not_configured", message: "Server has no Anthropic credentials configured." });
+  if (!ai)
+    return res.status(503).json({ error: "not_configured", message: "Server has no Gemini API key configured." });
   const { question, options, correctIndex, explanation } = req.body || {};
   if (typeof question !== "string" || !Array.isArray(options) || options.length !== 4 ||
       !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3)
     return res.status(400).json({ error: "bad_request", message: "Invalid hint request." });
   try {
-    const msg = await client.messages.create({
-      model: MODEL, max_tokens: 120, temperature: 0.5, system: HINT_SYSTEM,
-      messages: [{
-        role: "user",
-        content: `Question: ${clean(question, 300)}\nOptions: ${options.map((o, i) => `${i + 1}. ${clean(o, 100)}`).join(" | ")}\nCorrect: ${correctIndex + 1}\nPrinciple: ${clean(explanation, 500)}`,
-      }],
+    const resp = await ai.models.generateContent({
+      model: MODEL,
+      contents: `Question: ${clean(question, 300)}\nOptions: ${options.map((o, i) => `${i + 1}. ${clean(o, 100)}`).join(" | ")}\nCorrect: ${correctIndex + 1}\nPrinciple: ${clean(explanation, 500)}`,
+      config: { systemInstruction: HINT_SYSTEM, temperature: 0.5, maxOutputTokens: 1024 },
     });
-    const hint = textOf(msg).trim().slice(0, 220);
+    const hint = (resp.text ?? "").trim().slice(0, 220);
     if (!hint) throw new Error("empty hint");
     res.json({ hint });
   } catch (e) {
@@ -234,5 +248,5 @@ if (isProd) {
 }
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Quiz Show on :${PORT} (${isProd ? "production" : "dev"}) model=${MODEL} ai=${client ? "ready" : "NOT CONFIGURED"}`);
+  console.log(`Quiz Show on :${PORT} (${isProd ? "production" : "dev"}) model=${MODEL} ai=${ai ? "ready" : "NOT CONFIGURED"}`);
 });
