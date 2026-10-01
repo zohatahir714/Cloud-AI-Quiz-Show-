@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { min-height: 100%; }
+  body {
+    @apply font-sans text-ink antialiased overflow-x-hidden;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(185,167,255,.16), transparent 60%),
+      radial-gradient(800px 500px at 90% 110%, rgba(34,228,255,.08), transparent 60%),
+      #060A18;
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .panel { @apply rounded-2xl border border-navy-700 bg-navy-900/80 backdrop-blur; }
+  .label { @apply font-mono text-[11px] uppercase tracking-[0.2em] text-lav/80; }
+  .chip { @apply rounded-full border border-navy-600 px-3 py-1 font-mono text-[11px] uppercase tracking-wider; }
+  .btn {
+    @apply inline-flex min-h-[56px] items-center justify-center rounded-xl px-6 font-mono text-sm
+           font-semibold uppercase tracking-widest transition
+           focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cy
+           disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary { @apply bg-cy text-navy-950 hover:brightness-110; }
+  .btn-ghost { @apply border border-navy-600 text-lav hover:border-lav; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
