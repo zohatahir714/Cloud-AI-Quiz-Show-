@@ -19,6 +19,17 @@ export const TOPICS: Topic[] = [
   { id: "evals", label: "LLM Evaluation & Safety", tag: "EVALS" },
 ];
 
+export const TECH_STACKS = [
+  "General Cloud & AI",
+  "AWS Architecture",
+  "Microsoft Azure",
+  "Google Cloud (GCP)",
+  "DevOps & Kubernetes",
+  "LLM & Agentic AI",
+] as const;
+
+export type TechStack = typeof TECH_STACKS[number];
+
 export function difficultyFor(i: number): Difficulty {
   return i < 3 ? "Easy" : i < 6 ? "Medium" : i < 8 ? "Hard" : "Expert";
 }
