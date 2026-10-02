@@ -16,6 +16,7 @@ const NO_LIFELINES: Lifelines = { fifty: false, skip: false, hint: false };
 export default function App() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [index, setIndex] = useState(0);
+  const [techTarget, setTechTarget] = useState<string>("");
   const [meta, setMeta] = useState<{ topic: string; difficulty: Difficulty } | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -30,7 +31,7 @@ export default function App() {
   const history = useRef<string[]>([]);   // every question shown (anti-repeat)
   const reqId = useRef(0);                // ignore stale responses
 
-  const loadQuestion = useCallback(async (i: number) => {
+  const loadQuestion = useCallback(async (i: number, tech: string) => {
     const id = ++reqId.current;
     const m = { topic: plan.current[i], difficulty: difficultyFor(i) };
     setIndex(i);
@@ -38,7 +39,7 @@ export default function App() {
     setError("");
     setPhase("loading");
     try {
-      const q = await fetchQuestion({ ...m, previous: history.current });
+      const q = await fetchQuestion({ techTarget: tech, topic: m.topic, difficulty: m.difficulty, previous: history.current });
       if (id !== reqId.current) return;
       history.current.push(q.question);
       setQuestion(q);
@@ -50,18 +51,19 @@ export default function App() {
     } catch (e) {
       if (id !== reqId.current) return;
       setError(e instanceof Error ? e.message : "Unknown error");
-      setPhase("error"); // round state (index, results, lifelines, history) is preserved
+      setPhase("error");
     }
   }, []);
 
-  const start = (topics: string[]) => {
+  const start = (selectedTech: string, topics: string[]) => {
+    setTechTarget(selectedTech);
     let order: string[] = [];
     while (order.length < TOTAL_QUESTIONS) order = order.concat(shuffle(topics));
     plan.current = order.slice(0, TOTAL_QUESTIONS);
     history.current = [];
     setResults([]);
     setUsed(NO_LIFELINES);
-    void loadQuestion(0);
+    void loadQuestion(0, selectedTech);
   };
 
   const quit = () => {
@@ -105,7 +107,7 @@ export default function App() {
   const skip = () => {
     if (used.skip || phase !== "playing") return;
     setUsed((u) => ({ ...u, skip: true }));
-    void loadQuestion(index); // same slot, fresh question, no score change
+    void loadQuestion(index, techTarget);
   };
 
   const requestHint = async () => {
@@ -115,7 +117,7 @@ export default function App() {
       const { hint: h } = await fetchHint(question);
       setHint(h);
       setHintState("idle");
-      setUsed((u) => ({ ...u, hint: true })); // only consumed on success
+      setUsed((u) => ({ ...u, hint: true }));
     } catch {
       setHintState("error");
     }
@@ -123,7 +125,7 @@ export default function App() {
 
   const next = () => {
     if (index + 1 >= TOTAL_QUESTIONS) setPhase("score");
-    else void loadQuestion(index + 1);
+    else void loadQuestion(index + 1, techTarget);
   };
 
   const score = results.filter((r) => r.isCorrect).length;
@@ -134,14 +136,15 @@ export default function App() {
       {inRound && <Hud index={index} total={TOTAL_QUESTIONS} score={score} results={results} onQuit={quit} />}
       <main className="flex flex-1 flex-col justify-start gap-4 pt-3 sm:justify-center">
         {phase === "setup" && <Setup onStart={start} />}
-        {phase === "loading" && meta && <Loading topic={meta.topic} difficulty={meta.difficulty} />}
+        {phase === "loading" && meta && <Loading topic={`${techTarget} • ${meta.topic}`} difficulty={meta.difficulty} />}
         {phase === "error" && (
-          <ErrorScreen message={error} onRetry={() => void loadQuestion(index)} onQuit={quit} />
+          <ErrorScreen message={error} onRetry={() => void loadQuestion(index, techTarget)} onQuit={quit} />
         )}
         {(phase === "playing" || phase === "locked" || phase === "reveal") && question && meta && (
           <Game
             question={question}
-            topic={meta.topic}
+            techTarget={techTarget}
+            domainTopic={meta.topic}
             difficulty={meta.difficulty}
             phase={phase}
             selected={selected}

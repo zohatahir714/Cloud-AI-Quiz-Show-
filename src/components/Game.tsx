@@ -5,7 +5,8 @@ const LETTERS = ["A", "B", "C", "D"];
 
 interface Props {
   question: Question;
-  topic: string;
+  techTarget: string;
+  domainTopic: string;
   difficulty: Difficulty;
   phase: "playing" | "locked" | "reveal";
   selected: number | null;
@@ -59,15 +60,19 @@ export default function Game(p: Props) {
   };
 
   const badgeStyle = (i: number) =>
-    p.phase === "reveal" && i === q.correctIndex ? "text-cy"
-    : p.phase === "reveal" && i === p.selected ? "text-hot"
-    : "text-lav";
+    p.phase === "reveal" && i === q.correctIndex
+      ? "text-cy"
+      : p.phase === "reveal" && i === p.selected
+      ? "text-hot"
+      : "text-lav";
 
   return (
     <section className="animate-fadeUp space-y-3 sm:space-y-4">
+      {/* Updated Header Badges */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="chip text-lav">{p.topic}</span>
-        <span className="chip text-cy">{p.difficulty}</span>
+        <span className="chip border-cy/40 bg-cy/10 font-bold text-cy">{p.techTarget}</span>
+        <span className="chip text-lav">{p.domainTopic}</span>
+        <span className="chip text-cy/80">{p.difficulty}</span>
       </div>
 
       <h1 className="panel px-4 py-5 text-[17px] font-semibold leading-snug sm:px-8 sm:py-8 sm:text-2xl lg:text-[28px]">

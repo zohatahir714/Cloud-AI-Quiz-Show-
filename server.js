@@ -45,7 +45,7 @@ Return ONE JSON object and nothing else (no markdown fences, no commentary) with
 {"question": string, "options": [string, string, string, string], "correctIndex": 0|1|2|3, "explanation": string, "sourceTitle": string, "sourceUrl": string}
 
 Rules:
-- Scenario-based: describe a concrete engineering situation, then ask what to do or what will happen. No trivia, no service limits, no pricing, no version numbers, no "which service does X".
+- Scenario-based: describe a concrete engineering situation grounded in the requested Primary Tech Stack / Focus and Domain Topic, then ask what to do or what will happen. No trivia, no service limits, no pricing, no version numbers, no "which service does X".
 - Test durable architecture principles that will still be true in five years.
 - "question": at most 18 words AND at most 105 characters.
 - Exactly 4 options, each at most ${MAX_OPTION_CHARS} characters, all plausible to a mid-level engineer, exactly one clearly best. No "all of the above". Keep option lengths similar so length does not give away the answer.
@@ -53,7 +53,7 @@ Rules:
 - Source: pick the single best-fitting entry from APPROVED SOURCES. Copy sourceTitle and sourceUrl exactly. Never invent URLs.
 
 APPROVED SOURCES:
-${SOURCES.map((s) => `- ${s.title} | ${s.url}`).join("\n")}`;
+${SOURCES.map((s) => `- ${s.title} \vert{}${s.url}`).join("\n")}`;
 
 const HINT_SYSTEM = `You give hints for a quiz question. Reply with ONE sentence, at most 25 words, that nudges the player toward the underlying principle.
 Never state, quote, or paraphrase the correct option. Never mention option letters or numbers. Plain text only.`;
@@ -129,12 +129,13 @@ function describeError(e) {
   return { text: msg || "unknown error" };
 }
 
-async function generateQuestion({ topic, difficulty, previous }) {
+async function generateQuestion({ techTarget, topic, difficulty, previous }) {
   let lastError = "";
   let sawRateLimit = false;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const prompt = [
-      `Topic: ${topic}`,
+      techTarget ? `Primary Tech Stack / Focus: ${techTarget}` : "",
+      `Domain Topic: ${topic}`,
       `Difficulty: ${difficulty}. ${DIFFICULTY_GUIDE[difficulty]}`,
       previous.length
         ? `Already asked (do NOT repeat or rephrase, even with a different technology):\n${previous.map((p) => `- ${p}`).join("\n")}`
@@ -150,7 +151,7 @@ async function generateQuestion({ topic, difficulty, previous }) {
         config: {
           systemInstruction: QUESTION_SYSTEM,
           temperature: 0.8,
-          maxOutputTokens: 2048, // headroom in case the model spends tokens on thinking
+          maxOutputTokens: 2048,
           responseMimeType: "application/json",
         },
       });
@@ -164,7 +165,7 @@ async function generateQuestion({ topic, difficulty, previous }) {
       lastError = d.text;
       if (d.rate) {
         sawRateLimit = true;
-        if (attempt < MAX_ATTEMPTS) await sleep(4000 * attempt); // back off, do not burn quota
+        if (attempt < MAX_ATTEMPTS) await sleep(4000 * attempt);
       }
     }
     console.warn(`[question] attempt ${attempt} failed: ${lastError}`);
@@ -194,6 +195,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true, model: MODEL, configu
 app.post("/api/question", limiter, async (req, res) => {
   if (!ai)
     return res.status(503).json({ error: "not_configured", message: "Server has no Gemini API key configured." });
+  const techTarget = clean(req.body?.techTarget, 80);
   const topic = clean(req.body?.topic, 80);
   const difficulty = req.body?.difficulty;
   if (!topic || typeof difficulty !== "string" || !Object.hasOwn(DIFFICULTY_GUIDE, difficulty))
@@ -201,7 +203,7 @@ app.post("/api/question", limiter, async (req, res) => {
   const previous = (Array.isArray(req.body?.previous) ? req.body.previous : [])
     .slice(-40).map((p) => clean(p, 200)).filter(Boolean);
   try {
-    res.json(await generateQuestion({ topic, difficulty, previous }));
+    res.json(await generateQuestion({ techTarget, topic, difficulty, previous }));
   } catch (e) {
     console.error("[question] failed:", e.message);
     res.status(502).json({ error: "generation_failed", message: e.message });
@@ -218,7 +220,7 @@ app.post("/api/hint", limiter, async (req, res) => {
   try {
     const resp = await ai.models.generateContent({
       model: MODEL,
-      contents: `Question: ${clean(question, 300)}\nOptions: ${options.map((o, i) => `${i + 1}. ${clean(o, 100)}`).join(" | ")}\nCorrect: ${correctIndex + 1}\nPrinciple: ${clean(explanation, 500)}`,
+      contents: `Question: ${clean(question, 300)}\nOptions: ${options.map((o, i) => `${i + 1}.${clean(o, 100)}`).join(" | ")}\nCorrect: ${correctIndex + 1}\nPrinciple: ${clean(explanation, 500)}`,
       config: { systemInstruction: HINT_SYSTEM, temperature: 0.5, maxOutputTokens: 1024 },
     });
     const hint = (resp.text ?? "").trim().slice(0, 220);

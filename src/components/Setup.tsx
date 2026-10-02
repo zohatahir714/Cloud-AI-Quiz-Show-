@@ -1,7 +1,12 @@
 import { useState } from "react";
-import { TOPICS, TOTAL_QUESTIONS } from "../game";
+import { TECH_STACKS, TOPICS, TOTAL_QUESTIONS } from "../game";
 
-export default function Setup({ onStart }: { onStart: (topics: string[]) => void }) {
+interface SetupProps {
+  onStart: (techTarget: string, topics: string[]) => void;
+}
+
+export default function Setup({ onStart }: SetupProps) {
+  const [techTarget, setTechTarget] = useState<string>(TECH_STACKS[0]);
   const [sel, setSel] = useState<Set<string>>(() => new Set(TOPICS.map((t) => t.label)));
 
   const toggle = (label: string) =>
@@ -26,12 +31,36 @@ export default function Setup({ onStart }: { onStart: (topics: string[]) => void
         </p>
       </div>
 
+      {/* Tech Stack Selection */}
+      <div className="panel p-4 sm:p-6">
+        <label htmlFor="tech-stack-select" className="label block mb-2">
+          Select Primary Tech Stack / Focus
+        </label>
+        <select
+          id="tech-stack-select"
+          value={techTarget}
+          onChange={(e) => setTechTarget(e.target.value)}
+          className="w-full rounded-xl border border-navy-700 bg-navy-800 px-4 py-3 text-sm font-semibold text-ink transition focus:border-cy focus:outline-none"
+        >
+          {TECH_STACKS.map((tech) => (
+            <option key={tech} value={tech} className="bg-navy-900 text-ink">
+              {tech}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Domain Topics Selection */}
       <div className="panel p-4 sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <p className="label">Select topics ({sel.size}/{TOPICS.length})</p>
           <div className="flex gap-2 font-mono text-xs">
-            <button className="min-h-[44px] px-2 text-lav hover:text-cy" onClick={() => setSel(new Set(TOPICS.map((t) => t.label)))}>ALL</button>
-            <button className="min-h-[44px] px-2 text-lav hover:text-cy" onClick={() => setSel(new Set())}>NONE</button>
+            <button className="min-h-[44px] px-2 text-lav hover:text-cy" onClick={() => setSel(new Set(TOPICS.map((t) => t.label)))}>
+              ALL
+            </button>
+            <button className="min-h-[44px] px-2 text-lav hover:text-cy" onClick={() => setSel(new Set())}>
+              NONE
+            </button>
           </div>
         </div>
 
@@ -41,6 +70,7 @@ export default function Setup({ onStart }: { onStart: (topics: string[]) => void
             return (
               <button
                 key={t.id}
+                type="button"
                 role="checkbox"
                 aria-checked={on}
                 onClick={() => toggle(t.label)}
@@ -61,7 +91,11 @@ export default function Setup({ onStart }: { onStart: (topics: string[]) => void
         </div>
       </div>
 
-      <button className="btn btn-primary w-full sm:mx-auto sm:flex sm:w-72" disabled={sel.size === 0} onClick={() => onStart([...sel])}>
+      <button
+        className="btn btn-primary w-full sm:mx-auto sm:flex sm:w-72"
+        disabled={sel.size === 0}
+        onClick={() => onStart(techTarget, [...sel])}
+      >
         Start game
       </button>
     </section>
