@@ -30,8 +30,25 @@ export const TECH_STACKS = [
 
 export type TechStack = typeof TECH_STACKS[number];
 
-export function difficultyFor(i: number): Difficulty {
-  return i < 3 ? "Easy" : i < 6 ? "Medium" : i < 8 ? "Hard" : "Expert";
+export const DIFFICULTY_LEVELS = [
+  "Adaptive (Ramp Up)",
+  "Practitioner",
+  "Professional",
+  "Expert",
+] as const;
+
+export type DifficultyLevel = typeof DIFFICULTY_LEVELS[number];
+
+export function difficultyFor(
+  index: number,
+  chosenDifficulty: DifficultyLevel = "Adaptive (Ramp Up)"
+): Difficulty {
+  if (chosenDifficulty === "Practitioner") return "Easy";
+  if (chosenDifficulty === "Professional") return "Medium";
+  if (chosenDifficulty === "Expert") return "Expert";
+
+  // Adaptive Mode: Ramps up across 10 questions
+  return index < 3 ? "Easy" : index < 6 ? "Medium" : index < 8 ? "Hard" : "Expert";
 }
 
 export function shuffle<T>(arr: T[]): T[] {

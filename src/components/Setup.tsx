@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { TECH_STACKS, TOPICS, TOTAL_QUESTIONS } from "../game";
+import { TECH_STACKS, DIFFICULTY_LEVELS, TOPICS, TOTAL_QUESTIONS } from "../game";
 
 interface SetupProps {
-  onStart: (techTarget: string, topics: string[]) => void;
+  onStart: (techTarget: string, difficulty: string, topics: string[]) => void;
 }
 
 export default function Setup({ onStart }: SetupProps) {
   const [techTarget, setTechTarget] = useState<string>(TECH_STACKS[0]);
+  const [difficulty, setDifficulty] = useState<string>(DIFFICULTY_LEVELS[0]);
   const [sel, setSel] = useState<Set<string>>(() => new Set(TOPICS.map((t) => t.label)));
 
   const toggle = (label: string) =>
@@ -27,7 +28,7 @@ export default function Setup({ onStart }: SetupProps) {
           <span className="text-cy">Quiz Show</span>
         </h1>
         <p className="mx-auto max-w-xl text-sm text-ink/70 sm:text-base">
-          {TOTAL_QUESTIONS} scenario questions that climb from Easy to Expert. Three lifelines: 50:50, Skip, Hint.
+          {TOTAL_QUESTIONS} scenario questions tailored to your tech target &amp; difficulty level.
         </p>
       </div>
 
@@ -48,6 +49,30 @@ export default function Setup({ onStart }: SetupProps) {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Difficulty Level Selection */}
+      <div className="panel p-4 sm:p-6">
+        <p className="label mb-3">Select Difficulty Level</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3" role="group" aria-label="Difficulty level">
+          {DIFFICULTY_LEVELS.map((level) => {
+            const isActive = difficulty === level;
+            return (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setDifficulty(level)}
+                className={`min-h-[48px] rounded-xl border px-3 py-2 text-xs font-semibold sm:text-sm transition ${
+                  isActive
+                    ? "border-cy bg-cy/10 text-cy"
+                    : "border-navy-700 bg-navy-800 text-ink/70 hover:border-lav hover:text-ink"
+                }`}
+              >
+                {level}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Domain Topics Selection */}
@@ -94,7 +119,7 @@ export default function Setup({ onStart }: SetupProps) {
       <button
         className="btn btn-primary w-full sm:mx-auto sm:flex sm:w-72"
         disabled={sel.size === 0}
-        onClick={() => onStart(techTarget, [...sel])}
+        onClick={() => onStart(techTarget, difficulty, [...sel])}
       >
         Start game
       </button>

@@ -17,6 +17,7 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [index, setIndex] = useState(0);
   const [techTarget, setTechTarget] = useState<string>("");
+  const [difficultyTarget, setDifficultyTarget] = useState<string>("Adaptive (Ramp Up)");
   const [meta, setMeta] = useState<{ topic: string; difficulty: Difficulty } | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -31,9 +32,9 @@ export default function App() {
   const history = useRef<string[]>([]);   // every question shown (anti-repeat)
   const reqId = useRef(0);                // ignore stale responses
 
-  const loadQuestion = useCallback(async (i: number, tech: string) => {
+  const loadQuestion = useCallback(async (i: number, tech: string, targetDiff: string) => {
     const id = ++reqId.current;
-    const m = { topic: plan.current[i], difficulty: difficultyFor(i) };
+    const m = { topic: plan.current[i], difficulty: difficultyFor(i, targetDiff as any) };
     setIndex(i);
     setMeta(m);
     setError("");
@@ -55,15 +56,16 @@ export default function App() {
     }
   }, []);
 
-  const start = (selectedTech: string, topics: string[]) => {
+  const start = (selectedTech: string, selectedDifficulty: string, topics: string[]) => {
     setTechTarget(selectedTech);
+    setDifficultyTarget(selectedDifficulty);
     let order: string[] = [];
     while (order.length < TOTAL_QUESTIONS) order = order.concat(shuffle(topics));
     plan.current = order.slice(0, TOTAL_QUESTIONS);
     history.current = [];
     setResults([]);
     setUsed(NO_LIFELINES);
-    void loadQuestion(0, selectedTech);
+    void loadQuestion(0, selectedTech, selectedDifficulty);
   };
 
   const quit = () => {
@@ -107,7 +109,7 @@ export default function App() {
   const skip = () => {
     if (used.skip || phase !== "playing") return;
     setUsed((u) => ({ ...u, skip: true }));
-    void loadQuestion(index, techTarget);
+    void loadQuestion(index, techTarget, difficultyTarget);
   };
 
   const requestHint = async () => {
@@ -125,7 +127,7 @@ export default function App() {
 
   const next = () => {
     if (index + 1 >= TOTAL_QUESTIONS) setPhase("score");
-    else void loadQuestion(index + 1, techTarget);
+    else void loadQuestion(index + 1, techTarget, difficultyTarget);
   };
 
   const score = results.filter((r) => r.isCorrect).length;
@@ -138,7 +140,7 @@ export default function App() {
         {phase === "setup" && <Setup onStart={start} />}
         {phase === "loading" && meta && <Loading topic={`${techTarget} • ${meta.topic}`} difficulty={meta.difficulty} />}
         {phase === "error" && (
-          <ErrorScreen message={error} onRetry={() => void loadQuestion(index, techTarget)} onQuit={quit} />
+          <ErrorScreen message={error} onRetry={() => void loadQuestion(index, techTarget, difficultyTarget)} onQuit={quit} />
         )}
         {(phase === "playing" || phase === "locked" || phase === "reveal") && question && meta && (
           <Game
