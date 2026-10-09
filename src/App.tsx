@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Header from "./components/Header";
+import Landing from "./components/Landing";
+import PracticeGarden from "./components/PracticeGarden";
 import Setup from "./components/Setup";
 import Hud from "./components/Hud";
 import Loading from "./components/Loading";
@@ -9,12 +12,12 @@ import { fetchHint, fetchQuestion } from "./api";
 import { TOTAL_QUESTIONS, difficultyFor, shuffle } from "./game";
 import type { Difficulty, Lifelines, Question, Result } from "./types";
 
-type Phase = "setup" | "loading" | "error" | "playing" | "locked" | "reveal" | "score";
+type Phase = "home" | "practice" | "setup" | "loading" | "error" | "playing" | "locked" | "reveal" | "score";
 type HintState = "idle" | "loading" | "error";
 const NO_LIFELINES: Lifelines = { fifty: false, skip: false, hint: false };
 
 export default function App() {
-  const [phase, setPhase] = useState<Phase>("setup");
+  const [phase, setPhase] = useState<Phase>("home");
   const [index, setIndex] = useState(0);
   const [techTarget, setTechTarget] = useState<string>("");
   const [difficultyTarget, setDifficultyTarget] = useState<string>("Adaptive (Ramp Up)");
@@ -70,7 +73,7 @@ export default function App() {
 
   const quit = () => {
     reqId.current++;
-    setPhase("setup");
+    setPhase("home");
   };
 
   // Lock-in suspense, then reveal.
@@ -131,12 +134,23 @@ export default function App() {
   };
 
   const score = results.filter((r) => r.isCorrect).length;
-  const inRound = phase !== "setup" && phase !== "score";
+  const inRound = phase !== "home" && phase !== "practice" && phase !== "setup" && phase !== "score";
 
   return (
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col px-4 pb-8 sm:px-6">
+      {/* Top Header Navigation */}
+      <Header onGoHome={() => setPhase("home")} />
+
       {inRound && <Hud index={index} total={TOTAL_QUESTIONS} score={score} results={results} onQuit={quit} />}
+
       <main className="flex flex-1 flex-col justify-start gap-4 pt-3 sm:justify-center">
+        {phase === "home" && (
+          <Landing
+            onSelectQuiz={() => setPhase("setup")}
+            onSelectPractice={() => setPhase("practice")}
+          />
+        )}
+        {phase === "practice" && <PracticeGarden onBack={() => setPhase("home")} />}
         {phase === "setup" && <Setup onStart={start} />}
         {phase === "loading" && meta && <Loading topic={`${techTarget} • ${meta.topic}`} difficulty={meta.difficulty} />}
         {phase === "error" && (
